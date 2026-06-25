@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+# السطر السحري لحل مشكلة صلاحيات الرفع في الـ Release
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -92,8 +96,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: mac-assets
-        path: |
-          dist/UnDem_Mac_Portable.zip
+        path: dist/UnDem_Mac_Portable.zip
 
   create-release:
     needs: [build-windows, build-mac]
@@ -114,11 +117,12 @@ jobs:
     - name: Organize Release Files
       run: |
         mkdir release_tracked
-        cp windows_files/dist/UnDem.exe release_tracked/UnDem_Portable.exe
-        cp windows_files/dist/UnDem_Portable.zip release_tracked/UnDem_Portable_Windows.zip
-        cp windows_files/installer_dist/UnDem_Installer.exe release_tracked/UnDem_Installer.exe
-        cp windows_files/installer_dist/UnDem_Installer.zip release_tracked/UnDem_Installer.zip
-        cp mac_files/dist/UnDem_Mac_Portable.zip release_tracked/UnDem_Portable_Mac.zip
+        # طريقة مرنة للبحث عن الملفات ونقلها وتسميتها بدون الاعتماد على المجلدات الفرعية المعقدة
+        find windows_files -type f -name "UnDem.exe" -exec cp {} release_tracked/UnDem_Portable.exe \;
+        find windows_files -type f -name "UnDem_Portable.zip" -exec cp {} release_tracked/UnDem_Portable_Windows.zip \;
+        find windows_files -type f -name "UnDem_Installer.exe" -exec cp {} release_tracked/UnDem_Installer.exe \;
+        find windows_files -type f -name "UnDem_Installer.zip" -exec cp {} release_tracked/UnDem_Installer.zip \;
+        find mac_files -type f -name "UnDem_Mac_Portable.zip" -exec cp {} release_tracked/UnDem_Portable_Mac.zip \;
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
