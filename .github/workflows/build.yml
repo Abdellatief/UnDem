@@ -1,16 +1,13 @@
-name: Build UnDem Executable
+name: Build and Release UnDem
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch: # يتيح لك تشغيل البناء يدوياً في أي وقت
+    tags:
+      - 'v*' # سيعمل الترتيب تلقائياً فقط عندما ترفع تاغ يبدأ بحرف v مثل v1.0.0
 
 jobs:
   build-windows:
     runs-on: windows-latest
-
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
@@ -25,12 +22,131 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyinstaller
 
-    - name: Build EXE with PyInstaller
+    - name: Build Portable EXE
       run: |
         pyinstaller --noconsole --onefile --name="UnDem" undem.py
 
-    - name: Upload Build Artifact
+    - name: Create Portable ZIP
+      run: |
+        powershell Compress-Archive -Path dist\UnDem.exe -DestinationPath dist\UnDem_Portable.zip
+
+    - name: Compile Installer with Inno Setup
+      run: |
+        echo '[Setup]' > setup.iss
+        echo 'AppName=UnDem' >> setup.iss
+        echo 'AppVersion=${{ github.ref_name }}' >> setup.iss
+        echo 'DefaultDirName={autopf}\UnDem' >> setup.iss
+        echo 'DefaultGroupName=UnDem' >> setup.iss
+        echo 'OutputDir=installer_dist' >> setup.iss
+        echo 'OutputBaseFilename=UnDem_Installer' >> setup.iss
+        echo 'Compression=lzma' >> setup.iss
+        echo 'SolidCompression=yes' >> setup.iss
+        echo '[Files]' >> setup.iss
+        echo 'Source: "dist\UnDem.exe"; DestDir: "{app}"; Flags: ignoreversion' >> setup.iss
+        echo '[Icons]' >> setup.iss
+        echo 'Name: "{group}\UnDem"; Filename: "{app}\UnDem.exe"' >> setup.iss
+        echo 'Name: "{autodesktop}\UnDem"; Filename: "{app}\UnDem.exe"' >> setup.iss
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
+
+    - name: Create Installer ZIP
+      run: |
+        powershell Compress-Archive -Path installer_dist\UnDem_Installer.exe -DestinationPath installer_dist\UnDem_Installer.zip
+
+    - name: Upload Windows Assets
       uses: actions/upload-artifact@v4
       with:
-        name: UnDem-Windows-EXE
-        path: dist/UnDem.exe
+        name: windows-assets
+        path: |
+          dist/UnDem.exe
+          dist/UnDem_Portable.zip
+          installer_dist/UnDem_Installer.exe
+          installer_dist/UnDem_Installer.zip
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller create-dmg
+
+    - name: Build Portable App
+      run: |
+        pyinstaller --noconsole --onefile --name="UnDem" undem.py
+
+    - name: Create Mac Portable ZIP
+      run: |
+        cd dist
+        zip -r UnDem_Mac_Portable.zip UnDem.app
+        mv UnDem.app UnDem_Mac_Portable.app
+
+    - name: Build DMG Installer
+      run: |
+        mkdir dmg_input
+        cp -R dist/UnDem_Mac_Portable.app dmg_input/UnDem.app
+        create-dmg \
+          --volname "UnDem Installer" \
+          --window-size 500 300 \
+          --icon-size 100 \
+          --icon "UnDem.app" 175 120 \
+          --hide-extension "UnDem.app" \
+          --app-drop-link 325 120 \
+          dist/UnDem_Mac_Installer.dmg \
+          dmg_input/
+
+    - name: Create DMG ZIP
+      run: |
+        cd dist
+        zip UnDem_Mac_Installer.zip UnDem_Mac_Installer.dmg
+
+    - name: Upload Mac Assets
+      uses: actions/upload-artifact@v4
+      with:
+        name: mac-assets
+        path: |
+          dist/UnDem_Mac_Portable.app
+          dist/UnDem_Mac_Portable.zip
+          dist/UnDem_Mac_Installer.dmg
+          dist/UnDem_Mac_Installer.zip
+
+  create-release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Fetch Windows Assets
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-assets
+        path: windows_files
+
+    - name: Fetch Mac Assets
+      uses: actions/download-artifact@v4
+      with:
+        name: mac-assets
+        path: mac_files
+
+    - name: Organize Release Files
+      run: |
+        mkdir release_tracked
+        cp windows_files/dist/UnDem.exe release_tracked/UnDem_Portable.exe
+        cp windows_files/dist/UnDem_Portable.zip release_tracked/UnDem_Portable_Windows.zip
+        cp windows_files/installer_dist/UnDem_Installer.exe release_tracked/UnDem_Installer.exe
+        cp windows_files/installer_dist/UnDem_Installer.zip release_tracked/UnDem_Installer.zip
+        cp mac_files/dist/UnDem_Mac_Portable.zip release_tracked/UnDem_Portable_Mac.zip
+        cp mac_files/dist/UnDem_Mac_Installer.dmg release_tracked/UnDem_Installer.dmg
+        cp mac_files/dist/UnDem_Mac_Installer.zip release_tracked/UnDem_Installer_Mac.zip
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: release_tracked/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
