@@ -2,8 +2,9 @@ name: Build and Release UnDem
 
 on:
   push:
-    tags:
-      - 'v*' # سيعمل الترتيب تلقائياً فقط عندما ترفع تاغ يبدأ بحرف v مثل v1.0.0
+    branches:
+      - main     # سيعمل البناء تلقائياً فوراً بمجرد الحفظ أو الـ Push على فرع main
+  workflow_dispatch:  # لتفعيل زر التشغيل اليدوي من تبويب Actions كبسة واحدة
 
 jobs:
   build-windows:
@@ -34,7 +35,7 @@ jobs:
       run: |
         echo '[Setup]' > setup.iss
         echo 'AppName=UnDem' >> setup.iss
-        echo 'AppVersion=${{ github.ref_name }}' >> setup.iss
+        echo 'AppVersion=1.1.0' >> setup.iss
         echo 'DefaultDirName={autopf}\UnDem' >> setup.iss
         echo 'DefaultGroupName=UnDem' >> setup.iss
         echo 'OutputDir=installer_dist' >> setup.iss
@@ -148,5 +149,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: release_tracked/*
+        tag_name: v1.1.0        # سيتم توجيه الملفات ورفعها مباشرة داخل هذا الإصدار
+        overwrite: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
