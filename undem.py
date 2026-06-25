@@ -1,301 +1,163 @@
-import os
 import sys
+import os
 import json
-import subprocess
-import threading
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-
-# --- الإعدادات الافتراضية لحفظ التسميات والتفضيلات ---
-CONFIG_FILE = "undem_config.json"
+from tkinter import Tk, StringVar, Label, Button, Entry, Text, filedialog, messagebox, ttk, Frame, BOTH, LEFT, RIGHT, TOP, X, Y, END
 
 class UnDemApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("UnDem - The Future Vision")
-        self.root.geometry("800x600")
-        self.root.minsize(700, 500)
+        self.root.title("UnDem — The Future Vision")
+        self.root.geometry("900x650")
+        self.root.configure(bg="#121214")
         
-        self.selected_videos = []
-        self.output_dir = tk.StringVar(value=os.path.expanduser("~"))
-        self.track_names = [] # قائمة لحفظ مدخلات أسماء التراكات
+        # الإعدادات الافتراضية للوحة التحكم
+        self.config_file = "undem_config.json"
+        self.settings = self.load_settings()
         
-        # تحميل الإعدادات المحفوظة إن وجدت
-        self.load_config()
+        # النصوص للغات
+        self.languages = {
+            "EN": {
+                "title": "UnDem: Multi-Track Video Demuxer",
+                "subtitle": "The Future Vision - Professional Demuxing Tool",
+                "input_lbl": "1. Input Video Files",
+                "output_lbl": "2. Output Directory",
+                "naming_lbl": "3. Track Naming Rules (e.g., OBS)",
+                "btn_add": " Add Videos",
+                "btn_clear": " Clear List",
+                "btn_browse": "Choose Folder",
+                "btn_start": "Start Demuxing Now",
+                "btn_add_track": " Add Custom Track Name",
+                "status_ready": "Ready to work...",
+                "settings_title": "Control Panel",
+                "lang_lbl": "App Language:",
+                "theme_lbl": "Interface Theme: Dark Premium",
+                "track_prefix": "Video Track"
+            },
+            "AR": {
+                "title": "أنديم: فصل الكاميرات والتراكات بسهولة",
+                "subtitle": "UnDem: The Future Vision — أداة احترافية",
+                "input_lbl": "1. ملفات الفيديو المدخلة",
+                "output_lbl": "2. مكان فك التراكات (Output)",
+                "naming_lbl": "3. قاعدة تسمية التراكات (مثل OBS)",
+                "btn_add": " إضافة فيديوهات يدوياً",
+                "btn_clear": " مسح القائمة",
+                "btn_browse": "اختيار مجلد",
+                "btn_start": "ابدأ فك التراكات الآن",
+                "btn_add_track": " إضافة تراك إضافي في التسمية",
+                "status_ready": "...جاهز لبدء العمل",
+                "settings_title": "لوحة التحكم",
+                "lang_lbl": "لغة التطبيق:",
+                "theme_lbl": "المظهر: داكن احترافي",
+                "track_prefix": "تراك فيديو"
+            }
+        }
         
-        self.setup_styles()
-        self.create_widgets()
-        
-    def setup_styles(self):
-        # تصميم واجهة داكنة احترافية (Dark Theme) تناسب المصممين وصناع المحتوى
-        self.style = ttk.Style()
-        self.style.theme_use('clam')
-        
-        self.bg_color = "#1e1e24"
-        self.fg_color = "#ffffff"
-        self.accent_color = "#4f46e5" # بنفسجي عصري
-        self.card_bg = "#2a2a35"
-        self.text_muted = "#9ca3af"
-        
-        self.root.configure(bg=self.bg_color)
-        
-        self.style.configure(".", background=self.bg_color, foreground=self.fg_color, font=("Segoe UI", 10))
-        self.style.configure("TLabel", background=self.bg_color, foreground=self.fg_color)
-        self.style.configure("Header.TLabel", font=("Segoe UI", 16, "bold"), foreground=self.fg_color)
-        self.style.configure("Sub.TLabel", font=("Segoe UI", 9), foreground=self.text_muted)
-        
-        self.style.configure("Card.TFrame", background=self.card_bg, relief="flat")
-        self.style.configure("CardLabel.TLabel", background=self.card_bg, foreground=self.fg_color)
-        
-        # تصميم الأزرار
-        self.style.configure("TButton", background="#374151", foreground=self.fg_color, borderwidth=0, padding=6)
-        self.style.map("TButton", background=[("active", "#4b5563")])
-        
-        self.style.configure("Accent.TButton", background=self.accent_color, foreground=self.fg_color, borderwidth=0, padding=8, font=("Segoe UI", 10, "bold"))
-        self.style.map("Accent.TButton", background=[("active", "#4338ca")])
+        self.current_lang = self.settings.get("language", "EN")
+        self.setup_ui()
 
-    def create_widgets(self):
-        # --- الشريط العلوي ---
-        top_frame = ttk.Frame(self.root, padding=15)
-        top_frame.pack(fill="x")
-        
-        title_lbl = ttk.Label(top_frame, text="UnDem", style="Header.TLabel")
-        title_lbl.pack(anchor="w")
-        subtitle_lbl = ttk.Label(top_frame, text="UnDem: The Future Vision - أنديم: فصل الكاميرات والتراكات بسهولة", style="Sub.TLabel")
-        subtitle_lbl.pack(anchor="w", pady=(2, 0))
-        
-        # --- الجسم الرئيسي مقسم لجزئين ---
-        main_paned = ttk.Panedwindow(self.root, orient="horizontal")
-        main_paned.pack(fill="both", expand=True, padx=15, pady=5)
-        
-        # الطرف الأيسر: إدخال الفيديوهات والمسار
-        left_frame = ttk.Frame(main_paned, padding=5)
-        main_paned.add(left_frame, weight=3)
-        
-        # 1. قسم الفيديوهات
-        vid_section = ttk.LabelFrame(left_frame, text=" 1. ملفات الفيديو المدخلة ", padding=10)
-        vid_section.pack(fill="both", expand=True, pady=(0, 10))
-        
-        btn_box = ttk.Frame(vid_section)
-        btn_box.pack(fill="x", pady=(0, 5))
-        
-        add_btn = ttk.Button(btn_box, text="➕ إضافة فيديوهات يدوياً", command=self.browse_videos)
-        add_btn.pack(side="left", padx=2)
-        clear_btn = ttk.Button(btn_box, text="🗑️ مسح القائمة", command=self.clear_videos)
-        clear_btn.pack(side="left", padx=2)
-        
-        self.vid_listbox = tk.Listbox(vid_section, bg="#111827", fg="#f3f4f6", selectbackground=self.accent_color, borderwidth=0, highlightthickness=0, font=("Segoe UI", 9))
-        self.vid_listbox.pack(fill="both", expand=True, side="left")
-        
-        sb = ttk.Scrollbar(vid_section, orient="vertical", command=self.vid_listbox.yview)
-        sb.pack(fill="y", side="right")
-        self.vid_listbox.config(yscrollcommand=sb.set)
-        
-        # 2. قسم مجلد الإخراج
-        out_section = ttk.LabelFrame(left_frame, text=" 2. مكان فك التراكات (Output) ", padding=10)
-        out_section.pack(fill="x", pady=(0, 5))
-        
-        out_entry = ttk.Entry(out_section, textvariable=self.output_dir, font=("Segoe UI", 9))
-        out_entry.pack(fill="x", side="left", expand=True, padx=(0, 5))
-        
-        out_btn = ttk.Button(out_section, text="📁 اختيار مجلد", command=self.browse_output)
-        out_btn.pack(side="right")
-        
-        # الطرف الأيمن: تخصيص أسماء التراكات
-        right_frame = ttk.Frame(main_paned, padding=5)
-        main_paned.add(right_frame, weight=2)
-        
-        track_section = ttk.LabelFrame(right_frame, text=" 3. قاعدة تسمية التراكات (مثل OBS) ", padding=10)
-        track_section.pack(fill="both", expand=True)
-        
-        tip_lbl = ttk.Label(track_section, text="اكتب لاحقة الاسم لكل تراك تلو الآخر بالترتيب:", style="Sub.TLabel")
-        tip_lbl.pack(anchor="w", pady=(0, 8))
-        
-        # وعاء لعرض خانات التراكات الديناميكية
-        self.tracks_scroll_frame = ttk.Frame(track_section)
-        self.tracks_scroll_frame.pack(fill="both", expand=True)
-        
-        self.render_track_inputs()
-        
-        # زر إضافة خانة تراك جديدة
-        add_t_btn = ttk.Button(track_section, text="➕ إضافة تراك إضافي في التسمية", command=self.add_track_field)
-        add_t_btn.pack(fill="x", pady=5)
-        
-        # --- شريط الحالة وزر البدء السفلي ---
-        bottom_frame = ttk.Frame(self.root, padding=15)
-        bottom_frame.pack(fill="x")
-        
-        self.progress_bar = ttk.Progressbar(bottom_frame, mode="determinate")
-        self.progress_bar.pack(fill="x", pady=(0, 10))
-        
-        self.status_lbl = ttk.Label(bottom_frame, text="جاهز لبدء العمل...", font=("Segoe UI", 9), style="Sub.TLabel")
-        self.status_lbl.pack(side="left")
-        
-        start_btn = ttk.Button(bottom_frame, text="🎬 ابدأ فك التراكات الآن", style="Accent.TButton", command=self.start_demuxing_thread)
-        start_btn.pack(side="right")
-
-    def render_track_inputs(self):
-        for widget in self.tracks_scroll_frame.winfo_children():
-            widget.destroy()
-            
-        self.track_entries = []
-        for i, name_val in enumerate(self.track_names):
-            f = ttk.Frame(self.tracks_scroll_frame, padding=2)
-            f.pack(fill="x")
-            
-            lbl = ttk.Label(f, text=f"تراك فيديو {i+1}: ", width=12)
-            lbl.pack(side="left")
-            
-            ent = ttk.Entry(f)
-            ent.insert(0, name_val)
-            ent.pack(fill="x", side="left", expand=True, padx=2)
-            self.track_entries.append(ent)
-            
-            if i > 0:
-                del_b = ttk.Button(f, text="❌", width=3, command=lambda idx=i: self.remove_track_field(idx))
-                del_b.pack(side="right")
-
-    def add_track_field(self):
-        self.sync_track_names()
-        self.track_names.append(f"Cam_{len(self.track_names)+1}")
-        self.render_track_inputs()
-        self.save_config()
-
-    def remove_track_field(self, idx):
-        self.sync_track_names()
-        if 0 <= idx < len(self.track_names):
-            self.track_names.pop(idx)
-        self.render_track_inputs()
-        self.save_config()
-
-    def sync_track_names(self):
-        self.track_names = [ent.get().strip() for ent in self.track_entries]
-
-    def browse_videos(self):
-        files = filedialog.askopenfilenames(
-            title="اختر ملفات الفيديو متعددة التراكات",
-            filetypes=[("Video Files", "*.mkv *.mp4 *.avi *.mov"), ("All Files", "*.*")]
-        )
-        if files:
-            for f in files:
-                if f not in self.selected_videos:
-                    self.selected_videos.append(f)
-                    self.vid_listbox.insert(tk.END, os.path.basename(f))
-
-    def clear_videos(self):
-        self.selected_videos.clear()
-        self.vid_listbox.delete(0, tk.END)
-
-    def browse_output(self):
-        dir_path = filedialog.askdirectory(title="اختر مجلد استخراج الفيديوهات")
-        if dir_path:
-            self.output_dir.set(dir_path)
-            self.save_config()
-
-    def load_config(self):
-        if os.path.exists(CONFIG_FILE):
+    def load_settings(self):
+        if os.path.exists(self.config_file):
             try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-                    self.track_names = config.get("track_names", ["Original", "Cam_1", "Cam_2"])
-                    if "output_dir" in config and os.path.exists(config["output_dir"]):
-                        self.output_dir.set(config["output_dir"])
-                    return
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
             except:
                 pass
-        self.track_names = ["Original", "Cam_1", "Cam_2"]
+        return {"language": "EN"}
 
-    def save_config(self):
-        self.sync_track_names()
-        config = {
-            "track_names": self.track_names,
-            "output_dir": self.output_dir.get()
-        }
-        try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=4)
-        except:
-            pass
+    def save_settings(self):
+        with open(self.config_file, 'w', encoding='utf-8') as f:
+            json.dump({"language": self.current_lang}, f)
 
-    def start_demuxing_thread(self):
-        self.sync_track_names()
-        self.save_config()
-        if not self.selected_videos:
-            messagebox.showwarning("تنبيه", "من فضلك قم بإضافة ملف فيديو واحد على الأقل أولاً!")
-            return
+    def switch_language(self, lang):
+        self.current_lang = lang
+        self.save_settings()
+        # إعادة بناء الواجهة لتطبيق اللغة فوراُ
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        self.setup_ui()
+
+    def setup_ui(self):
+        ln = self.languages[self.current_lang]
+        align = RIGHT if self.current_lang == "AR" else LEFT
         
-        t = threading.Thread(target=self.run_demuxing)
-        t.daemon = True
-        t.start()
-
-    def run_demuxing(self):
-        out_base = self.output_dir.get()
-        total_files = len(self.selected_videos)
+        # ستايل التنسيق العام (Premium Dark UI)
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure("TProgressbar", thickness=8, troughcolor="#1A1A1E", background="#6366F1")
         
-        # إدارة وتحديد مسارات الأدوات لتتوافق مع البناء المدمج (sys._MEIPASS) للويندوز والماك
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS
-        else:
-            base_path = os.path.dirname(os.path.abspath(__file__))
+        # ---- الهيدر العلوي ----
+        header = Frame(self.root, bg="#1E1E24", height=70)
+        header.pack(fill=X, side=TOP)
+        header.pack_propagate(False)
+        
+        title_lbl = Label(header, text=ln["title"], fg="#FFFFFF", bg="#1E1E24", font=("Segoe UI", 14, "bold"))
+        title_lbl.pack(side=align, padx=20, pady=10)
+        
+        # لوحة التحكم في اللغات داخل الهيدر
+        lang_frame = Frame(header, bg="#1E1E24")
+        lang_frame.pack(side=RIGHT if align == LEFT else LEFT, padx=20, pady=15)
+        
+        Label(lang_frame, text=ln["lang_lbl"], fg="#A1A1AA", bg="#1E1E24", font=("Segoe UI", 9)).pack(side=LEFT, padx=5)
+        btn_en = Button(lang_frame, text="English", command=lambda: self.switch_language("EN"), bg="#27272A", fg="#FFFFFF", relief="flat", font=("Segoe UI", 8))
+        btn_en.pack(side=LEFT, padx=2)
+        btn_ar = Button(lang_frame, text="العربية", command=lambda: self.switch_language("AR"), bg="#27272A", fg="#FFFFFF", relief="flat", font=("Segoe UI", 8))
+        btn_ar.pack(side=LEFT, padx=2)
+
+        # ---- الجسم الأساسي للبرنامج ----
+        body = Frame(self.root, bg="#121214")
+        body.pack(fill=BOTH, expand=True, padx=20, pady=15)
+        
+        # القسم الأيسر/الأيمن: الملفات والمجلدات
+        left_frame = Frame(body, bg="#121214")
+        left_frame.pack(side=align, fill=BOTH, expand=True, padx=10)
+        
+        Label(left_frame, text=ln["input_lbl"], fg="#F4F4F5", bg="#121214", font=("Segoe UI", 11, "bold")).pack(anchor="w" if align==LEFT else "e", pady=5)
+        
+        # قائمة الملفات بشكل مودرن
+        self.file_list = Text(left_frame, height=12, bg="#1E1E24", fg="#E4E4E7", bd=0, highlightthickness=1, highlightbackground="#27272A", font=("Segoe UI", 10))
+        self.file_list.pack(fill=X, pady=5)
+        
+        btn_box = Frame(left_frame, bg="#121214")
+        btn_box.pack(fill=X, pady=5)
+        Button(btn_box, text=ln["btn_add"], bg="#4F46E5", fg="#FFFFFF", relief="flat", font=("Segoe UI", 10, "bold"), width=15).pack(side=align, padx=2)
+        Button(btn_box, text=ln["btn_clear"], bg="#27272A", fg="#EF4444", relief="flat", font=("Segoe UI", 10), width=12).pack(side=align, padx=2)
+        
+        # المخرجات
+        Label(left_frame, text=ln["output_lbl"], fg="#F4F4F5", bg="#121214", font=("Segoe UI", 11, "bold")).pack(anchor="w" if align==LEFT else "e", pady=15)
+        out_box = Frame(left_frame, bg="#121214")
+        out_box.pack(fill=X)
+        Entry(out_box, bg="#1E1E24", fg="#FFFFFF", bd=0, highlightthickness=1, highlightbackground="#27272A", font=("Segoe UI", 10)).pack(side=align, fill=X, expand=True, ipady=4, padx=2)
+        Button(out_box, text=ln["btn_browse"], bg="#27272A", fg="#FFFFFF", relief="flat", font=("Segoe UI", 9)).pack(side=align, padx=2)
+        
+        # القسم الآخر: التسميات والقواعد
+        right_frame = Frame(body, bg="#1E1E24", bd=0, highlightthickness=1, highlightbackground="#27272A")
+        right_frame.pack(side=RIGHT if align==LEFT else LEFT, fill=BOTH, expand=True, padx=10, ipady=10)
+        
+        Label(right_frame, text=ln["naming_lbl"], fg="#F4F4F5", bg="#1E1E24", font=("Segoe UI", 11, "bold")).pack(pady=10, padx=15, anchor="w" if align==LEFT else "e")
+        
+        # حقول التسمية التلقائية الافتراضية
+        for i in range(1, 4):
+            t_frame = Frame(right_frame, bg="#1E1E24")
+            t_frame.pack(fill=X, padx=15, pady=4)
+            Label(t_frame, text=f"{ln['track_prefix']} {i}:", fg="#A1A1AA", bg="#1E1E24", font=("Segoe UI", 10)).pack(side=align, padx=5)
+            Entry(t_frame, bg="#121214", fg="#FFFFFF", bd=0, highlightthickness=1, highlightbackground="#27272A", width=25).pack(side=RIGHT if align==LEFT else LEFT, ipady=3)
             
-        ffmpeg_cmd = os.path.join(base_path, "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
-        ffprobe_cmd = os.path.join(base_path, "ffprobe.exe" if sys.platform == "win32" else "ffprobe")
+        Button(right_frame, text=ln["btn_add_track"], bg="#27272A", fg="#A1A1AA", relief="flat", font=("Segoe UI", 9)).pack(fill=X, padx=15, pady=15)
+
+        # ---- الفوتر السفلي (التقدم والتشغيل) ----
+        footer = Frame(self.root, bg="#1E1E24", height=80)
+        footer.pack(fill=X, side=BOTTOM)
         
-        if not os.path.exists(ffmpeg_cmd): ffmpeg_cmd = "ffmpeg"
-        if not os.path.exists(ffprobe_cmd): ffprobe_cmd = "ffprobe"
+        self.progress = ttk.Progressbar(footer, orient="horizontal", mode="determinate", style="TProgressbar")
+        self.progress.pack(fill=X, side=TOP)
+        self.progress['value'] = 35  # تجربة للشكل فقط
         
-        for idx, video_path in enumerate(self.selected_videos):
-            base_name = os.path.splitext(os.path.basename(video_path))[0]
-            ext = os.path.splitext(video_path)[1]
-            
-            self.status_lbl.config(text=f"جاري فحص التراكات لـ: {os.path.basename(video_path)}...")
-            self.progress_bar['value'] = (idx / total_files) * 100
-            self.root.update_idletasks()
-            
-            try:
-                probe_cmd = [
-                    ffprobe_cmd, "-v", "error", "-select_streams", "v",
-                    "-show_entries", "stream=index", "-of", "csv=p=0", video_path
-                ]
-                startupinfo = None
-                if sys.platform == "win32":
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    
-                output = subprocess.check_output(probe_cmd, text=True, startupinfo=startupinfo)
-                video_tracks = [line.strip() for line in output.strip().split('\n') if line.strip()]
-                num_tracks = len(video_tracks)
-            except Exception as e:
-                num_tracks = len(self.track_names)
-                video_tracks = [str(i) for i in range(num_tracks)]
-
-            if num_tracks == 0:
-                continue
-
-            for t_idx, stream_index in enumerate(video_tracks):
-                suffix = self.track_names[t_idx] if t_idx < len(self.track_names) else f"Track_{t_idx+1}"
-                output_filename = f"{base_name}_{suffix}{ext}"
-                full_output_path = os.path.join(out_base, output_filename)
-                
-                self.status_lbl.config(text=f"جاري استخراج تراك ({suffix}) إلى المجلد المختار...")
-                self.root.update_idletasks()
-                
-                extract_cmd = [
-                    ffmpeg_cmd, "-y", "-i", video_path,
-                    "-map", f"0:v:{t_idx}", "-map", "0:a?", 
-                    "-c", "copy", full_output_path
-                ]
-                
-                try:
-                    subprocess.run(extract_cmd, startupinfo=startupinfo, check=True)
-                except Exception as e:
-                    print(f"خطأ أثناء فك التراك {t_idx}: {e}")
-
-        self.progress_bar['value'] = 100
-        self.status_lbl.config(text="🎉 تم فك جميع التراكات وتسميتها بنجاح!")
-        messagebox.showinfo("نجاح العملية", "تم الانتهاء من فك وتسمية جميع التراكات بنجاح في المجلد المحدد!")
+        status_lbl = Label(footer, text=ln["status_ready"], fg="#A1A1AA", bg="#1E1E24", font=("Segoe UI", 10))
+        status_lbl.pack(side=align, padx=20, pady=15)
+        
+        Button(footer, text=ln["btn_start"], bg="#6366F1", fg="#FFFFFF", relief="flat", font=("Segoe UI", 11, "bold"), padx=20).pack(side=RIGHT if align==LEFT else LEFT, padx=20, pady=12)
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    root = Tk()
     app = UnDemApp(root)
     root.mainloop()
