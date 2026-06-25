@@ -3,8 +3,8 @@ name: Build and Release UnDem
 on:
   push:
     branches:
-      - main     # سيعمل البناء تلقائياً فوراً بمجرد الحفظ أو الـ Push على فرع main
-  workflow_dispatch:  # لتفعيل زر التشغيل اليدوي من تبويب Actions كبسة واحدة
+      - main
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -77,7 +77,7 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller create-dmg
+        pip install pyinstaller
 
     - name: Build Portable App
       run: |
@@ -87,36 +87,13 @@ jobs:
       run: |
         cd dist
         zip -r UnDem_Mac_Portable.zip UnDem.app
-        mv UnDem.app UnDem_Mac_Portable.app
-
-    - name: Build DMG Installer
-      run: |
-        mkdir dmg_input
-        cp -R dist/UnDem_Mac_Portable.app dmg_input/UnDem.app
-        create-dmg \
-          --volname "UnDem Installer" \
-          --window-size 500 300 \
-          --icon-size 100 \
-          --icon "UnDem.app" 175 120 \
-          --hide-extension "UnDem.app" \
-          --app-drop-link 325 120 \
-          dist/UnDem_Mac_Installer.dmg \
-          dmg_input/
-
-    - name: Create DMG ZIP
-      run: |
-        cd dist
-        zip UnDem_Mac_Installer.zip UnDem_Mac_Installer.dmg
 
     - name: Upload Mac Assets
       uses: actions/upload-artifact@v4
       with:
         name: mac-assets
         path: |
-          dist/UnDem_Mac_Portable.app
           dist/UnDem_Mac_Portable.zip
-          dist/UnDem_Mac_Installer.dmg
-          dist/UnDem_Mac_Installer.zip
 
   create-release:
     needs: [build-windows, build-mac]
@@ -142,14 +119,12 @@ jobs:
         cp windows_files/installer_dist/UnDem_Installer.exe release_tracked/UnDem_Installer.exe
         cp windows_files/installer_dist/UnDem_Installer.zip release_tracked/UnDem_Installer.zip
         cp mac_files/dist/UnDem_Mac_Portable.zip release_tracked/UnDem_Portable_Mac.zip
-        cp mac_files/dist/UnDem_Mac_Installer.dmg release_tracked/UnDem_Installer.dmg
-        cp mac_files/dist/UnDem_Mac_Installer.zip release_tracked/UnDem_Installer_Mac.zip
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         files: release_tracked/*
-        tag_name: v1.1.0        # سيتم توجيه الملفات ورفعها مباشرة داخل هذا الإصدار
+        tag_name: v1.1.0
         overwrite: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
