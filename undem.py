@@ -14,41 +14,41 @@ class UnDemApp:
         self.config_file = "undem_config.json"
         self.settings = self.load_settings()
         
-        # النصوص للغات
+        # النصوص للغات المحدثة بالكامل لتعبر عن فصل وفك الفيديوهات والمشاهد
         self.languages = {
             "EN": {
                 "title": "UnDem: Multi-Scene Video Splitter & Extractor",
                 "subtitle": "The Future Vision - Professional Splitting Tool",
                 "input_lbl": "1. Input Video Files",
                 "output_lbl": "2. Output Directory",
-                "naming_lbl": "3. Track Naming Rules (e.g., OBS)",
+                "naming_lbl": "3. Video Naming Rules (e.g., OBS)",
                 "btn_add": " Add Videos",
                 "btn_clear": " Clear List",
                 "btn_browse": "Choose Folder",
                 "btn_start": "Start Splitting Now",
-                "btn_add_track": " Add Custom Track Name",
+                "btn_add_track": " Add Custom Video Name",
                 "status_ready": "Ready to work...",
                 "settings_title": "Control Panel",
                 "lang_lbl": "App Language:",
                 "theme_lbl": "Interface Theme: Dark Premium",
-                "track_prefix": "Video Track"
+                "track_prefix": "Video Scene"
             },
             "AR": {
                 "title": "أنديم: فصل الكاميرات والمشاهد بسهولة",
                 "subtitle": "UnDem: The Future Vision — أداة احترافية",
                 "input_lbl": "1. ملفات الفيديو المدخلة",
                 "output_lbl": "2. مكان فك المشاهد (Output)",
-                "naming_lbl": "3. قاعدة تسمية الفيديوهات (مثل OBS)",
+                "naming_lbl": "3. قاعدة تسمية الفيديوهات المستخرجة (مثل OBS)",
                 "btn_add": " إضافة فيديوهات يدوياً",
                 "btn_clear": " مسح القائمة",
                 "btn_browse": "اختيار مجلد",
                 "btn_start": "ابدأ فصل المشاهد الآن",
-                "btn_add_track": " إضافة تراك إضافي في التسمية",
+                "btn_add_track": " إضافة اسم فيديو مخصص",
                 "status_ready": "...جاهز لبدء العمل",
                 "settings_title": "لوحة التحكم",
                 "lang_lbl": "لغة التطبيق:",
                 "theme_lbl": "المظهر: داكن احترافي",
-                "track_prefix": "تراك فيديو"
+                "track_prefix": "مشهد فيديو"
             }
         }
         
@@ -159,5 +159,19 @@ class UnDemApp:
 
 if __name__ == "__main__":
     root = Tk()
+    
+    # كود متطور ومقاوم للأخطاء لقراءة الأيقونة من المسار الصحيح في جميع وضعيات التثبيت والنسخ
+    try:
+        if hasattr(sys, '_MEIPASS'):
+            # إذا تم تشغيل البرنامج من داخل ملف EXE مضغوط (PyInstaller)
+            icon_path = os.path.join(sys._MEIPASS, "logo.ico")
+        else:
+            # إذا كان يعمل ككود بايثون عادي قيد التطوير والتجربة
+            icon_path = "logo.ico"
+            
+        root.iconbitmap(icon_path)
+    except Exception as e:
+        print("تنبيه الأيقونة: لم يتم تطبيق الأيقونة على ترويسة النافذة، تم فتح الأيقونة الافتراضية.", e)
+        
     app = UnDemApp(root)
     root.mainloop()
