@@ -1,7 +1,7 @@
 import sys
 import os
 import json
-from tkinter import Tk, StringVar, Label, Button, Entry, Text, filedialog, messagebox, ttk, Frame, BOTH, LEFT, RIGHT, TOP, X, Y, END
+from tkinter import Tk, StringVar, Label, Button, Entry, Text, filedialog, messagebox, ttk, Frame, BOTH, LEFT, RIGHT, TOP, BOTTOM, X, Y, END
 
 class UnDemApp:
     def __init__(self, root):
@@ -17,15 +17,15 @@ class UnDemApp:
         # النصوص للغات
         self.languages = {
             "EN": {
-                "title": "UnDem: Multi-Track Video Demuxer",
-                "subtitle": "The Future Vision - Professional Demuxing Tool",
+                "title": "UnDem: Multi-Scene Video Splitter & Extractor",
+                "subtitle": "The Future Vision - Professional Splitting Tool",
                 "input_lbl": "1. Input Video Files",
                 "output_lbl": "2. Output Directory",
                 "naming_lbl": "3. Track Naming Rules (e.g., OBS)",
                 "btn_add": " Add Videos",
                 "btn_clear": " Clear List",
                 "btn_browse": "Choose Folder",
-                "btn_start": "Start Demuxing Now",
+                "btn_start": "Start Splitting Now",
                 "btn_add_track": " Add Custom Track Name",
                 "status_ready": "Ready to work...",
                 "settings_title": "Control Panel",
@@ -34,15 +34,15 @@ class UnDemApp:
                 "track_prefix": "Video Track"
             },
             "AR": {
-                "title": "أنديم: فصل الكاميرات والتراكات بسهولة",
+                "title": "أنديم: فصل الكاميرات والمشاهد بسهولة",
                 "subtitle": "UnDem: The Future Vision — أداة احترافية",
                 "input_lbl": "1. ملفات الفيديو المدخلة",
-                "output_lbl": "2. مكان فك التراكات (Output)",
-                "naming_lbl": "3. قاعدة تسمية التراكات (مثل OBS)",
+                "output_lbl": "2. مكان فك المشاهد (Output)",
+                "naming_lbl": "3. قاعدة تسمية الفيديوهات (مثل OBS)",
                 "btn_add": " إضافة فيديوهات يدوياً",
                 "btn_clear": " مسح القائمة",
                 "btn_browse": "اختيار مجلد",
-                "btn_start": "ابدأ فك التراكات الآن",
+                "btn_start": "ابدأ فصل المشاهد الآن",
                 "btn_add_track": " إضافة تراك إضافي في التسمية",
                 "status_ready": "...جاهز لبدء العمل",
                 "settings_title": "لوحة التحكم",
@@ -71,7 +71,7 @@ class UnDemApp:
     def switch_language(self, lang):
         self.current_lang = lang
         self.save_settings()
-        # إعادة بناء الواجهة لتطبيق اللغة فوراُ
+        # إعادة بناء الواجهة لتطبيق اللغة فوراً
         for widget in self.root.winfo_children():
             widget.destroy()
         self.setup_ui()
