@@ -55,9 +55,9 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 2️⃣ بناء ملفات الماك المعدل والمضمون
+  # 2️⃣ بناء ملفات الماك (نسخة التثبيت DMG + النسخة المحمولة ZIP)
   build-mac:
-    name: Build macOS DMG
+    name: Build macOS DMG & Portable
     runs-on: macos-latest
     permissions:
       contents: write
@@ -76,28 +76,34 @@ jobs:
         
     - name: Build macOS App
       run: |
-        # بناء برنامج الماك (إذا لم تتوفر الأيقونة بصيغة icns سيتجاوزها تلقائياً لتفادي الأخطاء)
         if [ -f "logo.icns" ]; then
           python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.ico:." --icon="logo.icns" undem.py
         else
           python -m PyInstaller --noconfirm --onefile --windowed undem.py
         fi
         
-    - name: Create DMG Package (Native)
+    - name: Create DMG and Portable ZIP Packages
       run: |
         VERSION=${GITHUB_REF#refs/tags/}
         if [[ "$VERSION" == refs/heads/* ]]; then VERSION="main-build"; fi
         
-        # استخدام أداة الماك الأصلية hdiutil المضمونة داخل السيرفر
+        # أ) تجهيز وصناعة النسخة المحمولة المضغوطة (.zip وبداخلها الـ .app)
+        cd dist
+        zip -r UnDem_Portable_Mac_$VERSION.zip undem.app
+        cd ..
+        
+        # ب) صناعة حزمة التثبيت الرسمية (.dmg) باستخدام hdiutil الأصلي
         mkdir -p dist/dmg
         cp -R dist/undem.app dist/dmg/
-        hdiutil create -volname "UnDem Installer" -srcfolder dist/dmg -ov -format UDZO dist/UnDem_Mac_$VERSION.dmg
+        hdiutil create -volname "UnDem Installer" -srcfolder dist/dmg -ov -format UDZO dist/UnDem_Mac_Installer_$VERSION.dmg
 
     - name: Upload macOS Assets to Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: dist/UnDem_Mac_*.dmg
+        files: |
+          dist/UnDem_Mac_Installer_*.dmg
+          dist/UnDem_Portable_Mac_*.zip
         tag_name: ${{ github.ref_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
