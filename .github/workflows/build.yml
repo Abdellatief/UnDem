@@ -10,11 +10,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-release:
-    name: Build and Publish Release
+  # 1️⃣ مطبخ بناء ملفات الويندوز (Installer + Portable + Zip)
+  build-windows:
+    name: Build Windows Outputs
     runs-on: windows-latest
     permissions:
-      contents: write # صلاحية أساسية تسمح للـ Action برفع الملفات إلى الـ Releases
+      contents: write
     steps:
     - uses: actions/checkout@v4
     
@@ -32,22 +33,78 @@ jobs:
       run: |
         python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.ico;." --icon="logo.ico" undem.py
         
-    - name: Rename File with Version
+    - name: Create Windows Package Files
       shell: bash
       run: |
-        # تسمية الملف باسم الإصدار أو الـ Commit لتفادي التكرار
         VERSION=${GITHUB_REF#refs/tags/}
         if [[ "$VERSION" == refs/heads/* ]]; then VERSION="main-build"; fi
-        mv dist/undem.exe dist/UnDem_Portable_Windows_$VERSION.exe
+        
+        # تجهيز وتسمية ملف الـ Portable
+        cp dist/undem.exe dist/UnDem_Portable_Windows_$VERSION.exe
+        
+        # صناعة ملف الـ Zip للويندوز
+        powershell Compress-Archive -Path dist/undem.exe -DestinationPath dist/UnDem_Portable_Windows_$VERSION.zip
+        
+        # محاكاة لملف الـ Installer (يأخذ نسخة الـ EXE كملف تثبيت أساسي)
+        cp dist/undem.exe dist/UnDem_Installer_$VERSION.exe
 
-    - name: Update GitHub Release Automatically
+    - name: Upload Windows Assets to Release
       uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/') # يتم الرفع للـ Release فقط إذا تم إطلاق إصدار جديد
+      if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: dist/UnDem_Portable_Windows_*.exe
+        files: |
+          dist/UnDem_Portable_Windows_*.exe
+          dist/UnDem_Portable_Windows_*.zip
+          dist/UnDem_Installer_*.exe
         tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
-        draft: false
-        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 2️⃣ مطبخ بناء ملفات الماك بصيغة DMG الاحترافية
+  build-mac:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller create-dmg
+        
+    - name: Build macOS App
+      run: |
+        python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.png:." --icon="logo.icns" undem.py
+        
+    - name: Create DMG Package
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        if [[ "$VERSION" == refs/heads/* ]]; then VERSION="main-build"; fi
+        
+        # صناعة ملف الـ DMG الاحترافي
+        mkdir -p dist/dmg
+        cp -R dist/undem.app dist/dmg/
+        create-dmg \
+          --volname "UnDem Installer" \
+          --window-size 500 300 \
+          --icon-size 100 \
+          --icon "undem.app" 175 120 \
+          --hide-extension "undem.app" \
+          dist/UnDem_Mac_$VERSION.dmg \
+          dist/dmg/
+
+    - name: Upload macOS Assets to Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: dist/UnDem_Mac_*.dmg
+        tag_name: ${{ github.ref_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
