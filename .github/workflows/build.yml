@@ -23,36 +23,27 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: Install Dependencies
+    - name: Build Windows Executables (Ultra Light)
       run: |
+        python -m venv venv
+        .\venv\Scripts\activate
         python -m pip install --upgrade pip
         pip install pyinstaller
-
-    # 📥 خطوة ذكية: تحميل FFmpeg رسمي آلياً على السيرفر لتضمينه في التجميعة
-    - name: Setup FFmpeg for Build
-      uses: FedericoCarboni/setup-ffmpeg@v3
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Build Windows Portable EXE
-      run: |
-        # جلب مسار ffmpeg و ffprobe الفعلي من السيرفر لنسخهم جوة الـ EXE
-        echo "Locating FFmpeg binaries..."
-        $FFMPEG_PATH = (Get-Command ffmpeg).Source
-        $FFPROBE_PATH = (Get-Command ffprobe).Source
         
-        # تشغيل التجميع مع دمج الأيقونة وأدوات الفرمتة بملف واحد بورتـابل
-        python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.ico;." --add-data "$FFMPEG_PATH;." --add-data "$FFPROBE_PATH;." --icon="logo.ico" undem.py
-        
-    - name: Create Inno Setup Script & Compile Installer
+        # تجميع البرنامج بدون دمج أي ملفات خارجية للحفاظ على مسافة 10 ميجا
+        python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.ico;." --icon="logo.ico" undem.py
+
+    - name: Create Packages and Installer
       shell: bash
       run: |
         VERSION=${GITHUB_REF#refs/tags/}
-        if [[ "$VERSION" == refs/heads/* ]]; then VERSION="main-build"; fi
+        if [[ "$VERSION" == refs/heads/* ]]; then VERSION="v1.2.5"; fi
         
+        # تجهيز النسخ الـ Portable والـ ZIP
         cp dist/undem.exe dist/UnDem_Portable_Windows_$VERSION.exe
         powershell Compress-Archive -Path dist/undem.exe -DestinationPath dist/UnDem_Portable_Windows_$VERSION.zip
         
+        # إنشاء سكريبت Inno Setup لبناء الـ Installer الرسمى
         cat <<EOF > setup.iss
         [Setup]
         AppName=UnDem
@@ -82,7 +73,7 @@ jobs:
     - name: Upload Windows Preview Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: UnDem-Windows-Preview
+        name: UnDem-Windows-Lite
         path: |
           dist/UnDem_Portable_Windows_*.exe
           dist/UnDem_Portable_Windows_*.zip
@@ -113,30 +104,23 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: Install Dependencies
+    - name: Build macOS App (Ultra Light)
       run: |
+        python -m venv venv
+        source venv/bin/activate
         python -m pip install --upgrade pip
         pip install pyinstaller
-
-    - name: Setup FFmpeg for macOS Build
-      uses: FedericoCarboni/setup-ffmpeg@v3
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
         
-    - name: Build macOS App
-      run: |
-        FFMPEG_PATH=$(which ffmpeg)
-        FFPROBE_PATH=$(which ffprobe)
         if [ -f "logo.icns" ]; then
-          python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.ico:." --add-data "$FFMPEG_PATH:." --add-data "$FFPROBE_PATH:." --icon="logo.icns" undem.py
+          python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.ico:." --icon="logo.icns" undem.py
         else
-          python -m PyInstaller --noconfirm --onefile --windowed --add-data "$FFMPEG_PATH:." --add-data "$FFPROBE_PATH:." undem.py
+          python -m PyInstaller --noconfirm --onefile --windowed undem.py
         fi
         
     - name: Create DMG and Portable ZIP Packages
       run: |
         VERSION=${GITHUB_REF#refs/tags/}
-        if [[ "$VERSION" == refs/heads/* ]]; then VERSION="main-build"; fi
+        if [[ "$VERSION" == refs/heads/* ]]; then VERSION="v1.2.5"; fi
         
         cd dist
         zip -r UnDem_Portable_Mac_$VERSION.zip undem.app
@@ -149,7 +133,7 @@ jobs:
     - name: Upload macOS Preview Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: UnDem-Mac-Preview
+        name: UnDem-Mac-Lite
         path: |
           dist/UnDem_Mac_Installer_*.dmg
           dist/UnDem_Portable_Mac_*.zip
