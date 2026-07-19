@@ -7,7 +7,7 @@ class UnDemApp:
     def __init__(self, root):
         self.root = root
         self.root.title("UnDem — The Future Vision")
-        self.root.geometry("950:680")
+        self.root.geometry("950x680")
         self.root.configure(bg="#07090e") # الخلفية الكربونية الزرقاء المتوافقة مع الشعار
         
         # الإعدادات الافتراضية لويندوز الإعدادات
