@@ -2,7 +2,12 @@ import sys
 import os
 import json
 import subprocess
-from tkinter import Tk, StringVar, Label, Button, Entry, Text, filedialog, messagebox, ttk, Frame, BOTH, LEFT, RIGHT, TOP, BOTTOM, X, Y, END
+import re
+import urllib.request
+import zipfile
+import shutil
+import threading
+from tkinter import Tk, StringVar, Label, Button, Entry, Text, filedialog, messagebox, ttk, Frame, BOTH, LEFT, RIGHT, TOP, BOTTOM, X, Y, END, Toplevel
 
 class UnDemApp:
     def __init__(self, root):
@@ -32,7 +37,11 @@ class UnDemApp:
                 "status_done": "Splitting completed successfully! 🎉",
                 "lang_lbl": "Language:",
                 "msg_select_video": "Please add at least one video file first.",
-                "msg_select_output": "Please select an output directory."
+                "msg_select_output": "Please select an output directory.",
+                "dl_title": "Downloading Components",
+                "dl_msg": "Downloading FFmpeg component to run the application for the first time...\nPlease wait, the file is compressed and lightweight.",
+                "dl_success": "FFmpeg downloaded successfully! The app is ready to use.",
+                "dl_fail": "Failed to download FFmpeg automatically:\n"
             },
             "AR": {
                 "title": "أنديم: فصل الكاميرات والمشاهد بسهولة",
@@ -47,17 +56,106 @@ class UnDemApp:
                 "status_done": "تم فصل الكاميرات والمشاهد بنجاح! 🎉",
                 "lang_lbl": "اللغة:",
                 "msg_select_video": "يرجى إضافة ملف فيديو واحد على الأقل أولاً.",
-                "msg_select_output": "يرجى تحديد مجلد إخراج لحفظ الفيديوهات المستخرجة."
+                "msg_select_output": "يرجى تحديد مجلد إخراج لحفظ الفيديوهات المستخرجة.",
+                "dl_title": "تحميل المكونات الإضافية",
+                "dl_msg": "جاري تحميل مكون FFmpeg لتشغيل البرنامج لأول مرة...\nيرجى الانتظار، حجم الملف صغير ومضغوط.",
+                "dl_success": "تم تحميل FFmpeg بنجاح! البرنامج جاهز للعمل الآن.",
+                "dl_fail": "فشل تحميل FFmpeg تلقائياً:\n"
             }
         }
         
         self.status_var = StringVar()
         self.status_var.set(self.languages[self.current_lang]["status_ready"])
         self.setup_ui()
+        
+        # فحص أوتوماتيكي ذكي للمكونات فور تشغيل التطبيق بـ 100 ملي ثانية
+        self.root.after(100, self.check_and_download_ffmpeg)
 
     def get_bin_path(self, bin_name):
-        # هنا يعتمد البرنامج مباشرة على النظام دون البحث عن ملفات مدمجة لتقليل الحجم
+        ext = ".exe" if os.name == 'nt' else ""
+        if hasattr(sys, '_MEIPASS'):
+            local_path = os.path.join(os.path.dirname(sys.executable), bin_name + ext)
+        else:
+            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), bin_name + ext)
+            
+        if os.path.exists(local_path):
+            return local_path
         return bin_name
+
+    def check_and_download_ffmpeg(self):
+        ffmpeg_path = self.get_bin_path("ffmpeg")
+        # إذا كان الـ executable موجود محلياً أو متاح عالمياً بالـ PATH لا تفعل شيئاً
+        if os.path.exists(ffmpeg_path) or shutil.which("ffmpeg"):
+            return
+
+        ln = self.languages[self.current_lang]
+        download_win = Toplevel(self.root)
+        download_win.title(ln["dl_title"])
+        download_win.geometry("420x160")
+        download_win.configure(bg="#0e121a")
+        download_win.resizable(False, False)
+        download_win.transient(self.root)
+        download_win.grab_set()
+        
+        lbl = Label(download_win, text=ln["dl_msg"], fg="#f4f6fa", bg="#0e121a", font=("Segoe UI", 10), justify="center")
+        lbl.pack(pady=15)
+        
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure("DL.TProgressbar", thickness=10, troughcolor="#07090e", background="#00ffd1")
+        
+        progress = ttk.Progressbar(download_win, orient="horizontal", length=340, mode="determinate", style="DL.TProgressbar")
+        progress.pack(pady=5)
+        
+        def download_task():
+            try:
+                if os.name == 'nt':
+                    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+                else:
+                    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-osx64-gpl.zip"
+                
+                if hasattr(sys, '_MEIPASS'):
+                    base_dir = os.path.dirname(sys.executable)
+                else:
+                    base_dir = os.path.dirname(os.path.abspath(__file__))
+                    
+                zip_tmp = os.path.join(base_dir, "ffmpeg_tmp.zip")
+                extract_dir = os.path.join(base_dir, "ffmpeg_extracted")
+                
+                def reporthook(blocknum, blocksize, totalsize):
+                    read_so_far = blocknum * blocksize
+                    if totalsize > 0:
+                        percent = (read_so_far * 100) / totalsize
+                        progress['value'] = percent
+                        download_win.update_idletasks()
+                
+                urllib.request.urlretrieve(url, zip_tmp, reporthook)
+                
+                with zipfile.ZipFile(zip_tmp, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+                
+                target_bin = "ffmpeg.exe" if os.name == 'nt' else "ffmpeg"
+                out_bin_path = os.path.join(base_dir, target_bin)
+                
+                for root_dir, _, files in os.walk(extract_dir):
+                    if target_bin in files:
+                        shutil.move(os.path.join(root_dir, target_bin), out_bin_path)
+                        if os.name != 'nt':
+                            os.chmod(out_bin_path, 0o755)
+                        break
+                
+                shutil.rmtree(extract_dir, ignore_errors=True)
+                if os.path.exists(zip_tmp):
+                    os.remove(zip_tmp)
+                    
+                messagebox.showinfo("UnDem", ln["dl_success"], parent=download_win)
+                download_win.destroy()
+            except Exception as e:
+                messagebox.showerror("UnDem Error", f"{ln['dl_fail']}{str(e)}", parent=download_win)
+                download_win.destroy()
+
+        threading.Thread(target=download_task, daemon=True).start()
+        self.root.wait_window(download_win)
 
     def load_settings(self):
         if os.path.exists(self.config_file):
@@ -110,6 +208,14 @@ class UnDemApp:
         if directory:
             self.output_dir_var.set(directory)
 
+    def get_stream_counts(self, ffmpeg_bin, video_path, creation_flag):
+        cmd = [ffmpeg_bin, '-i', video_path]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore', creationflags=creation_flag)
+        output = res.stderr
+        video_matches = re.findall(r'Stream #\d+:\d+.*Video:', output)
+        audio_matches = re.findall(r'Stream #\d+:\d+.*Audio:', output)
+        return len(video_matches), len(audio_matches)
+
     def start_splitting_process(self):
         ln = self.languages[self.current_lang]
         if not self.video_files:
@@ -125,7 +231,6 @@ class UnDemApp:
         
         output_dir = self.output_dir_var.get()
         ffmpeg_bin = self.get_bin_path("ffmpeg")
-        ffprobe_bin = self.get_bin_path("ffprobe")
         
         try:
             total_files = len(self.video_files)
@@ -133,29 +238,23 @@ class UnDemApp:
             
             for file_index, video_path in enumerate(self.video_files):
                 base_name = os.path.splitext(os.path.basename(video_path))[0]
+                v_count, a_count = self.get_stream_counts(ffmpeg_bin, video_path, creation_flag)
                 
-                v_probe = [ffprobe_bin, '-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=index', '-of', 'csv=p=0', video_path]
-                res_v = subprocess.run(v_probe, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=creation_flag)
-                v_streams = [x for x in res_v.stdout.strip().split('\n') if x]
+                if v_count == 0 and a_count == 0:
+                    raise Exception("Could not retrieve system streams. Check local permissions.")
                 
-                a_probe = [ffprobe_bin, '-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', video_path]
-                res_a = subprocess.run(a_probe, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=creation_flag)
-                a_streams = [x for x in res_a.stdout.strip().split('\n') if x]
-                
-                for idx, stream in enumerate(v_streams):
+                for idx in range(v_count):
                     folder_name = f"Video_{idx}"
                     v_out_dir = os.path.join(output_dir, folder_name)
                     os.makedirs(v_out_dir, exist_ok=True)
-                    
                     out_file = os.path.join(v_out_dir, f"{folder_name}_{base_name}.mkv")
                     cmd = [ffmpeg_bin, '-y', '-i', video_path, '-map', f'0:v:{idx}', '-c', 'copy', out_file]
                     subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flag)
                 
-                for idx, stream in enumerate(a_streams):
+                for idx in range(a_count):
                     folder_name = f"Audio_{idx}"
                     a_out_dir = os.path.join(output_dir, folder_name)
                     os.makedirs(a_out_dir, exist_ok=True)
-                    
                     out_file = os.path.join(a_out_dir, f"{folder_name}_{base_name}.wav")
                     cmd = [ffmpeg_bin, '-y', '-i', video_path, '-map', f'0:a:{idx}', '-c:a', 'pcm_s24le', out_file]
                     subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flag)
@@ -170,7 +269,7 @@ class UnDemApp:
         except Exception as e:
             self.progress['value'] = 0
             self.status_var.set("Error!")
-            messagebox.showerror("UnDem Error", f"Error during execution:\n{str(e or 'Make sure FFmpeg is installed in system PATH')}")
+            messagebox.showerror("UnDem Error", f"Execution stopped:\n{str(e)}")
 
     def setup_ui(self):
         ln = self.languages[self.current_lang]
