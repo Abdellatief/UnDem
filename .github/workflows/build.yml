@@ -4,131 +4,77 @@ on:
   push:
     branches:
       - main
-      - master
-    tags:
-      - 'v*'
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build-windows:
     name: Build Windows Outputs
     runs-on: windows-latest
-    permissions:
-      contents: write
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        
-    - name: Build Windows Executable
-      run: |
-        python -m venv venv
-        .\venv\Scripts\activate
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.ico;." --icon="logo.ico" undem.py
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Packaging Windows Asset Deliverables
-      shell: bash
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/}
-        if [[ "$VERSION" == refs/heads/* ]]; then VERSION="v1.2.5"; fi
-        
-        # 1. النسخة المحمولة بصيغة EXE مباشرة
-        cp dist/undem.exe dist/UnDem_Portable_Windows_$VERSION.exe
-        
-        # 2. النسخة المحمولة بصيغة ZIP
-        powershell Compress-Archive -Path dist/undem.exe -DestinationPath dist/UnDem_Portable_Windows_$VERSION.zip
-        
-        # 3. سكريبت تثبيت المطور الاحترافي (Installer)
-        cat <<EOF > setup.iss
-        [Setup]
-        AppName=UnDem
-        AppVersion=$VERSION
-        DefaultDirName={pf32}\UnDem
-        DefaultGroupName=UnDem
-        OutputDir=dist
-        OutputBaseFilename=UnDem_Installer_$VERSION
-        SetupIconFile=logo.ico
-        Compression=lzma
-        SolidCompression=yes
-        DisableDirPage=no
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-        [Files]
-        Source: "dist\undem.exe"; DestDir: "{app}"; Flags: ignoreversion
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
 
-        [Icons]
-        Name: "{group}\UnDem"; Filename: "{app}\undem.exe"
-        Name: "{commondesktop}\UnDem"; Filename: "{app}\undem.exe"; Tasks: desktopicon
+      - name: Build EXE with PyInstaller
+        run: |
+          # التحقق من وجود الأيقونة لمنع فشل الأمر إذا لم تكن مرفوعة
+          if (Test-Path "logo.ico") {
+            pyinstaller --noconfirm --onedir --windowed --add-data "logo.ico;." undem.py
+          } else {
+            pyinstaller --noconfirm --onedir --windowed undem.py
+          }
 
-        [Tasks]
-        Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-        EOF
-        
-        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnDem-Windows-Beta
+          path: dist/
+          if-no-files-found: warn
 
-    - name: Upload Windows Assets to Release
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: |
-          dist/UnDem_Portable_Windows_*.exe
-          dist/UnDem_Portable_Windows_*.zip
-          dist/UnDem_Installer_*.exe
-        tag_name: ${{ github.ref_name }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-mac:
+  build-macos:
     name: Build macOS DMG & Portable
     runs-on: macos-latest
-    permissions:
-      contents: write
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        
-    - name: Build macOS App Bundles
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        if [ -f "logo.icns" ]; then
-          python -m PyInstaller --noconfirm --onefile --windowed --add-data "logo.ico:." --icon="logo.icns" undem.py
-        else
-          python -m PyInstaller --noconfirm --onefile --windowed undem.py
-        fi
-        
-    - name: Packaging macOS Asset Deliverables
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/}
-        if [[ "$VERSION" == refs/heads/* ]]; then VERSION="v1.2.5"; fi
-        
-        cd dist
-        # 4. النسخة المحمولة للماك ZIP
-        zip -r UnDem_Portable_Mac_$VERSION.zip undem.app
-        cd ..
-        
-        mkdir -p dist/dmg
-        cp -R dist/undem.app dist/dmg/
-        # 5. نسخة التثبيت الرسمية للماك DMG
-        hdiutil create -volname "UnDem Installer" -srcfolder dist/dmg -ov -format UDZO dist/UnDem_Mac_Installer_$VERSION.dmg
 
-    - name: Upload macOS Assets to Release
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: |
-          dist/UnDem_Mac_Installer_*.dmg
-          dist/UnDem_Portable_Mac_*.zip
-        tag_name: ${{ github.ref_name }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+
+      - name: Build App with PyInstaller
+        run: |
+          if [ -f "logo.ico" ]; then
+            pyinstaller --noconfirm --onedir --windowed --add-data "logo.ico:." undem.py
+          fi
+          if [ ! -f "logo.ico" ]; then
+            pyinstaller --noconfirm --onedir --windowed undem.py
+          fi
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnDem-macOS-Beta
+          path: dist/
+          if-no-files-found: warn
