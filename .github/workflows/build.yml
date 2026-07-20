@@ -81,26 +81,17 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
 
-      - name: Upload Windows Portable EXE
+      - name: Upload Windows Artifacts Locally
         uses: actions/upload-artifact@v4
         with:
-          name: UnDem_Portable_Windows_v1.3.0
-          path: dist/UnDem_Portable_Windows_v1.3.0.exe
-
-      - name: Upload Windows Compressed ZIP
-        uses: actions/upload-artifact@v4
-        with:
-          name: UnDem_Portable_Windows_v1.3.0_ZIP
-          path: dist/UnDem_Portable_Windows_v1.3.0.zip
-
-      - name: Upload Windows Installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: UnDem_Installer_v1.3.0
-          path: installer_out/UnDem_Installer_v1.3.0.exe
+          name: windows-outputs
+          path: |
+            dist/UnDem_Portable_Windows_v1.3.0.exe
+            dist/UnDem_Portable_Windows_v1.3.0.zip
+            installer_out/UnDem_Installer_v1.3.0.exe
 
   # ==========================================
-  # 2. بيئة عمل الماك (macOS Builds) - مُحدثة لحل المشكلة
+  # 2. بيئة عمل الماك (macOS Builds)
   # ==========================================
   build-mac:
     name: Build macOS Packages
@@ -122,14 +113,11 @@ jobs:
 
       - name: Download macOS FFmpeg Binaries Directly
         run: |
-          # تحميل الملف التنفيذي المباشر المستقر دون الحاجة لفك ضغط zip معقد
           curl -L -o ffmpeg https://github.com/eugeneoden/ffmpeg-macos/raw/master/ffmpeg
-          # إعطاء صلاحيات التنفيذ لـ ffmpeg وهي خطوة إجبارية في الماك
           chmod +x ffmpeg
 
       - name: Build macOS App Bundle
         run: |
-          # البناء باستخدام ملف ffmpeg المحلي الجاهز
           pyinstaller --noconfirm --windowed --add-data "ffmpeg:." --name="UnDem" undem.py
 
       - name: Create macOS Portable (.zip)
@@ -145,14 +133,40 @@ jobs:
           hdiutil create -volname "UnDem Installer" -srcfolder dmg_root -ov -format UDZO UnDem_Mac_Installer_v1.3.0.dmg
           rm -rf dmg_root
 
-      - name: Upload macOS Portable ZIP
+      - name: Upload macOS Artifacts Locally
         uses: actions/upload-artifact@v4
         with:
-          name: UnDem_Portable_Mac_v1.3.0
-          path: UnDem_Portable_Mac_v1.3.0.zip
+          name: macos-outputs
+          path: |
+            UnDem_Portable_Mac_v1.3.0.zip
+            UnDem_Mac_Installer_v1.3.0.dmg
 
-      - name: Upload macOS DMG Installer
-        uses: actions/upload-artifact@v4
+  # ==========================================
+  # 3. مرحلة الرفع التلقائي إلى ريليس v1.3.0
+  # ==========================================
+  upload-to-release:
+    name: Upload Assets to Release v1.3.0
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Flatten Artifacts Structure
+        run: |
+          mkdir final_assets
+          # تجميع كل الملفات المخرجة في مجلد واحد بدون مجلدات فرعية لرفعها مباشرة
+          find . -name "*.exe" -exec cp {} final_assets/ \;
+          find . -name "*.zip" -exec cp {} final_assets/ \;
+          find . -name "*.dmg" -exec cp {} final_assets/ \;
+
+      - name: Upload Assets to Existing GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: UnDem_Mac_Installer_v1.3.0
-          path: UnDem_Mac_Installer_v1.3.0.dmg
+          tag_name: v1.3.0
+          files: final_assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
