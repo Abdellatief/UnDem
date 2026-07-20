@@ -27,19 +27,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
 
-      - name: Build EXE with PyInstaller
+      - name: Download FFmpeg for Windows (Embedded)
+        run: |
+          curl -L -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
+          tar -xf ffmpeg.zip
+          Get-ChildItem -Path . -Filter "ffmpeg.exe" -Recurse | Move-Item -Destination .
+          rm ffmpeg.zip
+
+      - name: Build EXE with Embedded FFmpeg
         run: |
           if (Test-Path "logo.ico") {
-            pyinstaller --noconfirm --onedir --windowed --add-data "logo.ico;." undem.py
+            pyinstaller --noconfirm --onedir --windowed --add-data "logo.ico;." --add-data "ffmpeg.exe;." undem.py
           } else {
-            pyinstaller --noconfirm --onedir --windowed undem.py
+            pyinstaller --noconfirm --onedir --windowed --add-data "ffmpeg.exe;." undem.py
           }
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: UnDem-Windows-Beta
-          path: dist/
+          name: UnDem-Windows-Portable
+          path: dist/undem/
           if-no-files-found: warn
 
   build-macos:
@@ -60,18 +67,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
 
-      - name: Build App with PyInstaller
+      - name: Download FFmpeg for macOS (Embedded)
+        run: |
+          curl -L -o ffmpeg-mac.zip https://evermeet.cx/ffmpeg/getrelease/zip
+          unzip ffmpeg-mac.zip -d ffmpeg_mac_extracted
+          mv ffmpeg_mac_extracted/ffmpeg .
+          chmod +x ffmpeg
+          rm -rf ffmpeg-mac.zip ffmpeg_mac_extracted
+
+      - name: Build App with Embedded FFmpeg
         run: |
           if [ -f "logo.ico" ]; then
-            pyinstaller --noconfirm --onedir --windowed --add-data "logo.ico:." undem.py
+            pyinstaller --noconfirm --onedir --windowed --add-data "logo.ico:." --add-data "ffmpeg:." undem.py
           fi
           if [ ! -f "logo.ico" ]; then
-            pyinstaller --noconfirm --onedir --windowed undem.py
+            pyinstaller --noconfirm --onedir --windowed --add-data "ffmpeg:." undem.py
           fi
 
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: UnDem-macOS-Beta
-          path: dist/
+          name: UnDem-macOS-Portable
+          path: dist/undem/
           if-no-files-found: warn
