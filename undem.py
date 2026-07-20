@@ -3,8 +3,6 @@ import os
 import json
 import subprocess
 import re
-import urllib.request
-import zipfile
 import shutil
 import threading
 from tkinter import Tk, StringVar, Label, Button, Entry, Text, filedialog, messagebox, ttk, Frame, BOTH, LEFT, RIGHT, TOP, BOTTOM, X, Y, END, Toplevel
@@ -18,7 +16,6 @@ class UnDemApp:
         
         self.config_file = "undem_config.json"
         
-        # اللغات المدعومة بالكامل في النظام
         self.languages = {
             "EN": {
                 "title": "UnDem: Multi-Scene Video Splitter & Extractor",
@@ -34,9 +31,6 @@ class UnDemApp:
                 "lang_lbl": "Language:",
                 "msg_select_video": "Please add at least one video file first.",
                 "msg_select_output": "Please select an output directory.",
-                "dl_title": "Downloading Components",
-                "dl_msg": "Downloading FFmpeg component to run the application for the first time...\nPlease wait, the file is compressed and lightweight.",
-                "dl_fail": "Failed to download FFmpeg automatically:\n"
             },
             "AR": {
                 "title": "أنديم: فصل الكاميرات والمشاهد بسهولة",
@@ -52,15 +46,11 @@ class UnDemApp:
                 "lang_lbl": "اللغة:",
                 "msg_select_video": "يرجى إضافة ملف فيديو واحد على الأقل أولاً.",
                 "msg_select_output": "يرجى تحديد مجلد إخراج لحفظ الفيديوهات المستخرجة.",
-                "dl_title": "تحميل المكونات الإضافية",
-                "dl_msg": "جاري تحميل مكون FFmpeg لتشغيل البرنامج لأول مرة...\nيرجى الانتظار، حجم الملف صغير ومضغوط.",
-                "dl_fail": "فشل تحميل FFmpeg تلقائياً:\n"
             }
         }
 
-        # فحص وجود إعدادات سابقة (لتحديد أول تشغيل)
         if not os.path.exists(self.config_file):
-            self.current_lang = "EN" # افتراضي مؤقت لحين الاختيار
+            self.current_lang = "EN"
             self.show_language_selector_first_time()
         else:
             self.settings = self.load_settings()
@@ -68,18 +58,14 @@ class UnDemApp:
             self.initialize_app()
 
     def show_language_selector_first_time(self):
-        """نافذة تظهر للمستخدم عند أول تشغيل لاختيار اللغة المفضلة للبرنامج"""
         lang_win = Toplevel(self.root)
         lang_win.title("UnDem — Welcome")
         lang_win.geometry("380x180")
         lang_win.configure(bg="#0e121a")
         lang_win.resizable(False, False)
-        
-        # تجعل النافذة تركز في منتصف الشاشة فوق النافذة الرئيسية وتمنع الضغط خلفها
         lang_win.transient(self.root)
         lang_win.grab_set()
         
-        # لضمان غلق البرنامج بالكامل لو قفل النافذة دي بدون اختيار
         def on_close():
             lang_win.destroy()
             self.root.quit()
@@ -102,126 +88,33 @@ class UnDemApp:
         Button(btn_frame, text="English (EN)", command=lambda: select_lang("EN"), bg="#008be5", fg="#FFFFFF", relief="flat", font=("Segoe UI", 10, "bold"), width=14, padx=5, pady=5).pack(side=LEFT, padx=10)
         Button(btn_frame, text="العربية (AR)", command=lambda: select_lang("AR"), bg="#1c2436", fg="#00ffd1", relief="flat", font=("Segoe UI", 10, "bold"), width=14, padx=5, pady=5).pack(side=RIGHT, padx=10)
 
-        # توسيط النافذة برمجياً
         lang_win.update_idletasks()
         x = (lang_win.winfo_screenwidth() // 2) - (lang_win.winfo_width() // 2)
         y = (lang_win.winfo_screenheight() // 2) - (lang_win.winfo_height() // 2)
         lang_win.geometry(f"+{x}+{y}")
 
     def initialize_app(self):
-        """بدء تشغيل واجهة البرنامج والتحقق الذكي من المكونات"""
         self.video_files = []
         self.output_dir_var = StringVar()
         self.status_var = StringVar()
         self.status_var.set(self.languages[self.current_lang]["status_ready"])
-        
         self.setup_ui()
-        
-        # فحص المكونات التلقائي بعد ظهور الواجهة بـ 100 ملي ثانية
-        self.root.after(100, self.check_and_download_ffmpeg)
 
     def get_bin_path(self, bin_name):
         ext = ".exe" if os.name == 'nt' else ""
         target_name = bin_name + ext
         
+        # استدعاء الملف المدمج من الذاكرة المؤقتة لملف الـ EXE الواحد المغلق
         if hasattr(sys, '_MEIPASS'):
-            local_path = os.path.join(os.path.dirname(sys.executable), target_name)
-        else:
-            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), target_name)
-            
+            local_path = os.path.join(sys._MEIPASS, target_name)
+            if os.path.exists(local_path):
+                return local_path
+        
+        local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), target_name)
         if os.path.exists(local_path):
             return local_path
+            
         return shutil.which(bin_name) if shutil.which(bin_name) else local_path
-
-    def check_and_download_ffmpeg(self):
-        ffmpeg_path = self.get_bin_path("ffmpeg")
-        if os.path.exists(ffmpeg_path) or shutil.which("ffmpeg"):
-            return
-
-        ln = self.languages[self.current_lang]
-        download_win = Toplevel(self.root)
-        download_win.title(ln["dl_title"])
-        download_win.geometry("420x180")
-        download_win.configure(bg="#0e121a")
-        download_win.resizable(False, False)
-        download_win.transient(self.root)
-        download_win.grab_set()
-        
-        # منع إغلاق نافذة التحميل يدوياً لحماية ملفات النظام من العطب
-        download_win.protocol("WM_DELETE_WINDOW", lambda: None)
-        
-        lbl = Label(download_win, text=ln["dl_msg"], fg="#f4f6fa", bg="#0e121a", font=("Segoe UI", 10), justify="center")
-        lbl.pack(pady=15)
-        
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure("DL.TProgressbar", thickness=12, troughcolor="#07090e", background="#00ffd1")
-        
-        progress = ttk.Progressbar(download_win, orient="horizontal", length=340, mode="determinate", style="DL.TProgressbar")
-        progress.pack(pady=5)
-        
-        lbl_percent = Label(download_win, text="0%", fg="#00ffd1", bg="#0e121a", font=("Segoe UI", 10, "bold"))
-        lbl_percent.pack(pady=2)
-        
-        def download_task():
-            try:
-                if os.name == 'nt':
-                    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-                else:
-                    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-osx64-gpl.zip"
-                
-                if hasattr(sys, '_MEIPASS'):
-                    base_dir = os.path.dirname(sys.executable)
-                else:
-                    base_dir = os.path.dirname(os.path.abspath(__file__))
-                    
-                zip_tmp = os.path.join(base_dir, "ffmpeg_tmp.zip")
-                extract_dir = os.path.join(base_dir, "ffmpeg_extracted")
-                
-                def reporthook(blocknum, blocksize, totalsize):
-                    read_so_far = blocknum * blocksize
-                    if totalsize > 0:
-                        percent = int((read_so_far * 100) / totalsize)
-                        if percent > 100: percent = 100
-                        progress['value'] = percent
-                        lbl_percent.config(text=f"{percent}%")
-                        download_win.update_idletasks()
-                
-                urllib.request.urlretrieve(url, zip_tmp, reporthook)
-                
-                with zipfile.ZipFile(zip_tmp, 'r') as zip_ref:
-                    zip_ref.extractall(extract_dir)
-                
-                target_bin = "ffmpeg.exe" if os.name == 'nt' else "ffmpeg"
-                out_bin_path = os.path.join(base_dir, target_bin)
-                
-                if os.path.exists(out_bin_path):
-                    os.remove(out_bin_path)
-                    
-                file_found = False
-                for root_dir, _, files in os.walk(extract_dir):
-                    if target_bin in files:
-                        shutil.move(os.path.join(root_dir, target_bin), out_bin_path)
-                        if os.name != 'nt':
-                            os.chmod(out_bin_path, 0o755)
-                        file_found = True
-                        break
-                
-                shutil.rmtree(extract_dir, ignore_errors=True)
-                if os.path.exists(zip_tmp):
-                    os.remove(zip_tmp)
-                
-                if not file_found:
-                    raise Exception("FFmpeg binary missing inside zip package.")
-                
-                # إغلاق النافذة تلقائياً لبدء العمل الآمن مباشرة دون مقاطعة المستخدم
-                download_win.destroy()
-            except Exception as e:
-                messagebox.showerror("UnDem Error", f"{ln['dl_fail']}{str(e)}", parent=download_win)
-                download_win.destroy()
-
-        threading.Thread(target=download_task, daemon=True).start()
-        self.root.wait_window(download_win)
 
     def load_settings(self):
         if os.path.exists(self.config_file):
@@ -301,7 +194,7 @@ class UnDemApp:
         if not os.path.exists(ffmpeg_bin):
             self.progress['value'] = 0
             self.status_var.set("Error!")
-            messagebox.showerror("UnDem Error", "FFmpeg component is missing. Please restart the app.")
+            messagebox.showerror("UnDem Error", f"Core component (ffmpeg) not found inside the package.")
             return
 
         def worker_task():
