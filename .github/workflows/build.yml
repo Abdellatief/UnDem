@@ -47,12 +47,10 @@ jobs:
 
       - name: Create Windows Compressed (.zip)
         run: |
-          # ضغط ملف الـ Portable EXE داخل ملف Zip
           Compress-Archive -Path "dist/UnDem_Portable_Windows_v1.3.0.exe" -DestinationPath "dist/UnDem_Portable_Windows_v1.3.0.zip"
 
       - name: Create Inno Setup Script for Installer
         run: |
-          # كتابة سكريبت إنشاء معالج التثبيت تلقائياً
           $issContent = @"
           [Setup]
           AppName=UnDem
@@ -76,13 +74,11 @@ jobs:
           if (Test-Path "logo.ico") {
               $issContent | Out-File -FilePath "setup.iss" -Encoding utf8
           } else {
-              # إزالة أيقونة التثبيت إذا لم يكن اللوجو موجوداً
               $issContent -replace 'SetupIconFile=logo.ico', '' | Out-File -FilePath "setup.iss" -Encoding utf8
           }
 
       - name: Compile Windows Installer (.exe)
         run: |
-          # استخدام أداة ISCC المدمجة في سيرفرات ويندوز لبناء الـ Installer
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
 
       - name: Upload Windows Portable EXE
@@ -104,7 +100,7 @@ jobs:
           path: installer_out/UnDem_Installer_v1.3.0.exe
 
   # ==========================================
-  # 2. بيئة عمل الماك (macOS Builds)
+  # 2. بيئة عمل الماك (macOS Builds) - مُحدثة لحل المشكلة
   # ==========================================
   build-mac:
     name: Build macOS Packages
@@ -122,22 +118,19 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller dmgbuild
+          pip install pyinstaller
 
-      - name: Download macOS FFmpeg
+      - name: Download macOS FFmpeg Binaries Directly
         run: |
-          curl -L -o ffmpeg.zip https://evermeet.cx/ffmpeg/ffmpeg-release.zip
-          unzip ffmpeg.zip
-          rm ffmpeg.zip
+          # تحميل الملف التنفيذي المباشر المستقر دون الحاجة لفك ضغط zip معقد
+          curl -L -o ffmpeg https://github.com/eugeneoden/ffmpeg-macos/raw/master/ffmpeg
+          # إعطاء صلاحيات التنفيذ لـ ffmpeg وهي خطوة إجبارية في الماك
+          chmod +x ffmpeg
 
       - name: Build macOS App Bundle
         run: |
-          if [ -f "logo.ico" ]; then
-            # ملاحظة: الماك يفضل .icns للأيقونات، لكن سنعتمد الإعداد الأساسي
-            pyinstaller --noconfirm --windowed --add-data "ffmpeg:." --name="UnDem" undem.py
-          else
-            pyinstaller --noconfirm --windowed --add-data "ffmpeg:." --name="UnDem" undem.py
-          fi
+          # البناء باستخدام ملف ffmpeg المحلي الجاهز
+          pyinstaller --noconfirm --windowed --add-data "ffmpeg:." --name="UnDem" undem.py
 
       - name: Create macOS Portable (.zip)
         run: |
@@ -147,7 +140,6 @@ jobs:
 
       - name: Create macOS DMG Installer (.dmg)
         run: |
-          # استخدام أداة hdiutil المدمجة في الماك لبناء ملف DMG احترافي سريع
           mkdir dmg_root
           cp -r dist/UnDem.app dmg_root/
           hdiutil create -volname "UnDem Installer" -srcfolder dmg_root -ov -format UDZO UnDem_Mac_Installer_v1.3.0.dmg
