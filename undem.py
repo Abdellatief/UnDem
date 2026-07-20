@@ -17,12 +17,8 @@ class UnDemApp:
         self.root.configure(bg="#07090e")
         
         self.config_file = "undem_config.json"
-        self.settings = self.load_settings()
-        self.current_lang = self.settings.get("language", "EN")
-
-        self.video_files = []
-        self.output_dir_var = StringVar()
         
+        # اللغات المدعومة بالكامل في النظام
         self.languages = {
             "EN": {
                 "title": "UnDem: Multi-Scene Video Splitter & Extractor",
@@ -40,7 +36,6 @@ class UnDemApp:
                 "msg_select_output": "Please select an output directory.",
                 "dl_title": "Downloading Components",
                 "dl_msg": "Downloading FFmpeg component to run the application for the first time...\nPlease wait, the file is compressed and lightweight.",
-                "dl_success": "FFmpeg downloaded successfully! The app is ready to use.",
                 "dl_fail": "Failed to download FFmpeg automatically:\n"
             },
             "AR": {
@@ -59,53 +54,114 @@ class UnDemApp:
                 "msg_select_output": "يرجى تحديد مجلد إخراج لحفظ الفيديوهات المستخرجة.",
                 "dl_title": "تحميل المكونات الإضافية",
                 "dl_msg": "جاري تحميل مكون FFmpeg لتشغيل البرنامج لأول مرة...\nيرجى الانتظار، حجم الملف صغير ومضغوط.",
-                "dl_success": "تم تحميل FFmpeg بنجاح! البرنامج جاهز للعمل الآن.",
                 "dl_fail": "فشل تحميل FFmpeg تلقائياً:\n"
             }
         }
+
+        # فحص وجود إعدادات سابقة (لتحديد أول تشغيل)
+        if not os.path.exists(self.config_file):
+            self.current_lang = "EN" # افتراضي مؤقت لحين الاختيار
+            self.show_language_selector_first_time()
+        else:
+            self.settings = self.load_settings()
+            self.current_lang = self.settings.get("language", "EN")
+            self.initialize_app()
+
+    def show_language_selector_first_time(self):
+        """نافذة تظهر للمستخدم عند أول تشغيل لاختيار اللغة المفضلة للبرنامج"""
+        lang_win = Toplevel(self.root)
+        lang_win.title("UnDem — Welcome")
+        lang_win.geometry("380x180")
+        lang_win.configure(bg="#0e121a")
+        lang_win.resizable(False, False)
         
+        # تجعل النافذة تركز في منتصف الشاشة فوق النافذة الرئيسية وتمنع الضغط خلفها
+        lang_win.transient(self.root)
+        lang_win.grab_set()
+        
+        # لضمان غلق البرنامج بالكامل لو قفل النافذة دي بدون اختيار
+        def on_close():
+            lang_win.destroy()
+            self.root.quit()
+            sys.exit()
+        lang_win.protocol("WM_DELETE_WINDOW", on_close)
+
+        lbl = Label(lang_win, text="Welcome! Please choose your preferred language\nمرحباً بك! يرجى اختيار لغة البرنامج المفضلة", 
+                    fg="#f4f6fa", bg="#0e121a", font=("Segoe UI", 10, "bold"), justify="center")
+        lbl.pack(pady=25)
+
+        btn_frame = Frame(lang_win, bg="#0e121a")
+        btn_frame.pack(pady=5)
+
+        def select_lang(lang):
+            self.current_lang = lang
+            self.save_settings()
+            lang_win.destroy()
+            self.initialize_app()
+
+        Button(btn_frame, text="English (EN)", command=lambda: select_lang("EN"), bg="#008be5", fg="#FFFFFF", relief="flat", font=("Segoe UI", 10, "bold"), width=14, padx=5, pady=5).pack(side=LEFT, padx=10)
+        Button(btn_frame, text="العربية (AR)", command=lambda: select_lang("AR"), bg="#1c2436", fg="#00ffd1", relief="flat", font=("Segoe UI", 10, "bold"), width=14, padx=5, pady=5).pack(side=RIGHT, padx=10)
+
+        # توسيط النافذة برمجياً
+        lang_win.update_idletasks()
+        x = (lang_win.winfo_screenwidth() // 2) - (lang_win.winfo_width() // 2)
+        y = (lang_win.winfo_screenheight() // 2) - (lang_win.winfo_height() // 2)
+        lang_win.geometry(f"+{x}+{y}")
+
+    def initialize_app(self):
+        """بدء تشغيل واجهة البرنامج والتحقق الذكي من المكونات"""
+        self.video_files = []
+        self.output_dir_var = StringVar()
         self.status_var = StringVar()
         self.status_var.set(self.languages[self.current_lang]["status_ready"])
+        
         self.setup_ui()
         
-        # فحص أوتوماتيكي ذكي للمكونات فور تشغيل التطبيق بـ 100 ملي ثانية
+        # فحص المكونات التلقائي بعد ظهور الواجهة بـ 100 ملي ثانية
         self.root.after(100, self.check_and_download_ffmpeg)
 
     def get_bin_path(self, bin_name):
         ext = ".exe" if os.name == 'nt' else ""
+        target_name = bin_name + ext
+        
         if hasattr(sys, '_MEIPASS'):
-            local_path = os.path.join(os.path.dirname(sys.executable), bin_name + ext)
+            local_path = os.path.join(os.path.dirname(sys.executable), target_name)
         else:
-            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), bin_name + ext)
+            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), target_name)
             
         if os.path.exists(local_path):
             return local_path
-        return bin_name
+        return shutil.which(bin_name) if shutil.which(bin_name) else local_path
 
     def check_and_download_ffmpeg(self):
         ffmpeg_path = self.get_bin_path("ffmpeg")
-        # إذا كان الـ executable موجود محلياً أو متاح عالمياً بالـ PATH لا تفعل شيئاً
         if os.path.exists(ffmpeg_path) or shutil.which("ffmpeg"):
             return
 
         ln = self.languages[self.current_lang]
         download_win = Toplevel(self.root)
         download_win.title(ln["dl_title"])
-        download_win.geometry("420x160")
+        download_win.geometry("420x180")
         download_win.configure(bg="#0e121a")
         download_win.resizable(False, False)
         download_win.transient(self.root)
         download_win.grab_set()
+        
+        # منع إغلاق نافذة التحميل يدوياً لحماية ملفات النظام من العطب
+        download_win.protocol("WM_DELETE_WINDOW", lambda: None)
         
         lbl = Label(download_win, text=ln["dl_msg"], fg="#f4f6fa", bg="#0e121a", font=("Segoe UI", 10), justify="center")
         lbl.pack(pady=15)
         
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure("DL.TProgressbar", thickness=10, troughcolor="#07090e", background="#00ffd1")
+        style.configure("DL.TProgressbar", thickness=12, troughcolor="#07090e", background="#00ffd1")
         
         progress = ttk.Progressbar(download_win, orient="horizontal", length=340, mode="determinate", style="DL.TProgressbar")
         progress.pack(pady=5)
+        
+        lbl_percent = Label(download_win, text="0%", fg="#00ffd1", bg="#0e121a", font=("Segoe UI", 10, "bold"))
+        lbl_percent.pack(pady=2)
         
         def download_task():
             try:
@@ -125,8 +181,10 @@ class UnDemApp:
                 def reporthook(blocknum, blocksize, totalsize):
                     read_so_far = blocknum * blocksize
                     if totalsize > 0:
-                        percent = (read_so_far * 100) / totalsize
+                        percent = int((read_so_far * 100) / totalsize)
+                        if percent > 100: percent = 100
                         progress['value'] = percent
+                        lbl_percent.config(text=f"{percent}%")
                         download_win.update_idletasks()
                 
                 urllib.request.urlretrieve(url, zip_tmp, reporthook)
@@ -137,18 +195,26 @@ class UnDemApp:
                 target_bin = "ffmpeg.exe" if os.name == 'nt' else "ffmpeg"
                 out_bin_path = os.path.join(base_dir, target_bin)
                 
+                if os.path.exists(out_bin_path):
+                    os.remove(out_bin_path)
+                    
+                file_found = False
                 for root_dir, _, files in os.walk(extract_dir):
                     if target_bin in files:
                         shutil.move(os.path.join(root_dir, target_bin), out_bin_path)
                         if os.name != 'nt':
                             os.chmod(out_bin_path, 0o755)
+                        file_found = True
                         break
                 
                 shutil.rmtree(extract_dir, ignore_errors=True)
                 if os.path.exists(zip_tmp):
                     os.remove(zip_tmp)
-                    
-                messagebox.showinfo("UnDem", ln["dl_success"], parent=download_win)
+                
+                if not file_found:
+                    raise Exception("FFmpeg binary missing inside zip package.")
+                
+                # إغلاق النافذة تلقائياً لبدء العمل الآمن مباشرة دون مقاطعة المستخدم
                 download_win.destroy()
             except Exception as e:
                 messagebox.showerror("UnDem Error", f"{ln['dl_fail']}{str(e)}", parent=download_win)
@@ -200,7 +266,7 @@ class UnDemApp:
         self.file_list.config(state="normal")
         self.file_list.delete("1.0", END)
         for path in self.video_files:
-            self.file_list.insert(END, f" 🎥   {os.path.basename(path)}  —  ({path})\n")
+            self.file_list.insert(END, f" 🎥    {os.path.basename(path)}  —  ({path})\n")
         self.file_list.config(state="disabled")
 
     def browse_output_directory(self):
@@ -232,44 +298,53 @@ class UnDemApp:
         output_dir = self.output_dir_var.get()
         ffmpeg_bin = self.get_bin_path("ffmpeg")
         
-        try:
-            total_files = len(self.video_files)
-            creation_flag = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            
-            for file_index, video_path in enumerate(self.video_files):
-                base_name = os.path.splitext(os.path.basename(video_path))[0]
-                v_count, a_count = self.get_stream_counts(ffmpeg_bin, video_path, creation_flag)
-                
-                if v_count == 0 and a_count == 0:
-                    raise Exception("Could not retrieve system streams. Check local permissions.")
-                
-                for idx in range(v_count):
-                    folder_name = f"Video_{idx}"
-                    v_out_dir = os.path.join(output_dir, folder_name)
-                    os.makedirs(v_out_dir, exist_ok=True)
-                    out_file = os.path.join(v_out_dir, f"{folder_name}_{base_name}.mkv")
-                    cmd = [ffmpeg_bin, '-y', '-i', video_path, '-map', f'0:v:{idx}', '-c', 'copy', out_file]
-                    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flag)
-                
-                for idx in range(a_count):
-                    folder_name = f"Audio_{idx}"
-                    a_out_dir = os.path.join(output_dir, folder_name)
-                    os.makedirs(a_out_dir, exist_ok=True)
-                    out_file = os.path.join(a_out_dir, f"{folder_name}_{base_name}.wav")
-                    cmd = [ffmpeg_bin, '-y', '-i', video_path, '-map', f'0:a:{idx}', '-c:a', 'pcm_s24le', out_file]
-                    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flag)
-                
-                self.progress['value'] = 5 + int((file_index + 1) / total_files * 95)
-                self.root.update_idletasks()
-            
-            self.progress['value'] = 100
-            self.status_var.set(ln["status_done"])
-            messagebox.showinfo("UnDem", ln["status_done"])
-            
-        except Exception as e:
+        if not os.path.exists(ffmpeg_bin):
             self.progress['value'] = 0
             self.status_var.set("Error!")
-            messagebox.showerror("UnDem Error", f"Execution stopped:\n{str(e)}")
+            messagebox.showerror("UnDem Error", "FFmpeg component is missing. Please restart the app.")
+            return
+
+        def worker_task():
+            try:
+                total_files = len(self.video_files)
+                creation_flag = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                
+                for file_index, video_path in enumerate(self.video_files):
+                    base_name = os.path.splitext(os.path.basename(video_path))[0]
+                    v_count, a_count = self.get_stream_counts(ffmpeg_bin, video_path, creation_flag)
+                    
+                    if v_count == 0 and a_count == 0:
+                        raise Exception("Could not retrieve system streams. Check file parameters.")
+                    
+                    for idx in range(v_count):
+                        folder_name = f"Video_{idx}"
+                        v_out_dir = os.path.join(output_dir, folder_name)
+                        os.makedirs(v_out_dir, exist_ok=True)
+                        out_file = os.path.join(v_out_dir, f"{folder_name}_{base_name}.mkv")
+                        cmd = [ffmpeg_bin, '-y', '-i', video_path, '-map', f'0:v:{idx}', '-c', 'copy', out_file]
+                        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flag)
+                    
+                    for idx in range(a_count):
+                        folder_name = f"Audio_{idx}"
+                        a_out_dir = os.path.join(output_dir, folder_name)
+                        os.makedirs(a_out_dir, exist_ok=True)
+                        out_file = os.path.join(a_out_dir, f"{folder_name}_{base_name}.wav")
+                        cmd = [ffmpeg_bin, '-y', '-i', video_path, '-map', f'0:a:{idx}', '-c:a', 'pcm_s24le', out_file]
+                        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flag)
+                    
+                    percent = 5 + int((file_index + 1) / total_files * 95)
+                    self.root.after(0, lambda p=percent: self.progress.configure(value=p))
+                
+                self.root.after(0, lambda: self.progress.configure(value=100))
+                self.root.after(0, lambda: self.status_var.set(ln["status_done"]))
+                self.root.after(0, lambda: messagebox.showinfo("UnDem", ln["status_done"]))
+                
+            except Exception as e:
+                self.root.after(0, lambda: self.progress.configure(value=0))
+                self.root.after(0, lambda: self.status_var.set("Error!"))
+                self.root.after(0, lambda err=str(e): messagebox.showerror("UnDem Error", f"Execution stopped:\n{err}"))
+
+        threading.Thread(target=worker_task, daemon=True).start()
 
     def setup_ui(self):
         ln = self.languages[self.current_lang]
