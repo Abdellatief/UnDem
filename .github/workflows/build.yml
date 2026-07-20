@@ -34,59 +34,17 @@ jobs:
           Get-ChildItem -Path . -Filter "ffmpeg.exe" -Recurse | Move-Item -Destination .
           rm ffmpeg.zip
 
-      - name: Build EXE with Embedded FFmpeg
+      - name: Build Single EXE File
         run: |
           if (Test-Path "logo.ico") {
-            pyinstaller --noconfirm --onedir --windowed --add-data "logo.ico;." --add-data "ffmpeg.exe;." undem.py
+            pyinstaller --noconfirm --onefile --windowed --add-data "logo.ico;." --add-data "ffmpeg.exe;." undem.py
           } else {
-            pyinstaller --noconfirm --onedir --windowed --add-data "ffmpeg.exe;." undem.py
+            pyinstaller --noconfirm --onefile --windowed --add-data "ffmpeg.exe;." undem.py
           }
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: UnDem-Windows-Portable
-          path: dist/undem/
-          if-no-files-found: warn
-
-  build-macos:
-    name: Build macOS DMG & Portable
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-
-      - name: Download FFmpeg for macOS (Embedded)
-        run: |
-          curl -L -o ffmpeg-mac.zip https://evermeet.cx/ffmpeg/getrelease/zip
-          unzip ffmpeg-mac.zip -d ffmpeg_mac_extracted
-          mv ffmpeg_mac_extracted/ffmpeg .
-          chmod +x ffmpeg
-          rm -rf ffmpeg-mac.zip ffmpeg_mac_extracted
-
-      - name: Build App with Embedded FFmpeg
-        run: |
-          if [ -f "logo.ico" ]; then
-            pyinstaller --noconfirm --onedir --windowed --add-data "logo.ico:." --add-data "ffmpeg:." undem.py
-          fi
-          if [ ! -f "logo.ico" ]; then
-            pyinstaller --noconfirm --onedir --windowed --add-data "ffmpeg:." undem.py
-          fi
-
-      - name: Upload macOS Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: UnDem-macOS-Portable
-          path: dist/undem/
-          if-no-files-found: warn
+          name: UnDem-Windows-Single-EXE
+          path: dist/undem.exe
+          if-no-files-found: error
